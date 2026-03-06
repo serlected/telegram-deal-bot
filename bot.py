@@ -81,7 +81,8 @@ async def main():
         except Exception as e:
             print("Feed Fehler:", e)
 
-        await asyncio.sleep(60)
+        await asyncio.sleep(300)
 
 
 asyncio.run(main())
+
