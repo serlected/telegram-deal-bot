@@ -69,12 +69,14 @@ async def main():
                 # Temperatur aus Titel lesen
                 # ------------------------------------------------
 
-                temp_match = re.search(r"(\d+)°", entry.title)
+text_to_check = entry.title + " " + entry.get("description", "")
 
-                if temp_match:
-                    temperature = int(temp_match.group(1))
-                else:
-                    temperature = 0
+temp_match = re.search(r"(\d+)\s*°", text_to_check)
+
+if temp_match:
+    temperature = int(temp_match.group(1))
+else:
+    temperature = 0
 
 
                 if temperature < MIN_TEMP:
@@ -151,4 +153,5 @@ async def main():
 
 
 asyncio.run(main())
+
 
