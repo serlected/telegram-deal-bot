@@ -6,7 +6,8 @@ import feedparser
 import re
 from telegram import Bot
 
-TOKEN = "8221472099:AAGoB-z88dOYL9hhtfRWV_aOCAiayLofuok"
+import os
+TOKEN = os.getenv("TOKEN")
 CHAT_ID = "@billiger_gehts_nicht"
 
 RSS_URL = "https://www.mydealz.de/rss/deals"
@@ -81,5 +82,6 @@ async def main():
             print("Feed Fehler:", e)
 
         await asyncio.sleep(60)
+
 
 asyncio.run(main())
