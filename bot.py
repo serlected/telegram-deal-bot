@@ -128,8 +128,9 @@ else:
 
         print("Warte 5 Minuten bis zum nächsten Check...")
 
-        await asyncio.sleep(300)
+        await asyncio.sleep(50)
 
 
 asyncio.run(main())
+
 
