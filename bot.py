@@ -28,7 +28,7 @@ CHAT_ID = "@billiger_gehts_nicht"
 
 RSS_URL = "https://www.mydealz.de/rss/deals"
 
-MIN_TEMP = 300
+MIN_TEMP = 10
 
 posted_deals = set()
 
@@ -151,3 +151,4 @@ async def main():
 
 
 asyncio.run(main())
+
