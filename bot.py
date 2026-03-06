@@ -1,26 +1,12 @@
-# ------------------------------------------------
-# TELEGRAM DEAL BOT
-# ------------------------------------------------
-# Funktionen:
-# - liest MyDealz RSS Feed
-# - postet Deals automatisch in Telegram
-# - postet Bilder
-# - filtert Deals nach Temperatur
-# - verhindert Doppelposts
-# - markiert Amazon Deals
-# - zeigt Debug Infos in Railway Logs
-# ------------------------------------------------
-
 import os
 import asyncio
 import feedparser
 import re
 from telegram import Bot
 
-
-# ------------------------------------------------
+# -------------------------------
 # KONFIGURATION
-# ------------------------------------------------
+# -------------------------------
 
 TOKEN = os.getenv("TOKEN")
 
@@ -33,9 +19,9 @@ MIN_TEMP = 10
 posted_deals = set()
 
 
-# ------------------------------------------------
+# -------------------------------
 # HAUPTFUNKTION
-# ------------------------------------------------
+# -------------------------------
 
 async def main():
 
@@ -65,18 +51,20 @@ async def main():
                     continue
 
 
-                # ------------------------------------------------
-                # Temperatur aus Titel lesen
-                # ------------------------------------------------
+                # -------------------------------
+                # Temperatur aus Titel + Beschreibung
+                # -------------------------------
 
-text_to_check = entry.title + " " + entry.get("description", "")
+                text_to_check = entry.title + " " + entry.get("description", "")
 
-temp_match = re.search(r"(\d+)\s*°", text_to_check)
+                temp_match = re.search(r"(\d+)\s*°", text_to_check)
 
-if temp_match:
-    temperature = int(temp_match.group(1))
-else:
-    temperature = 0
+                if temp_match:
+                    temperature = int(temp_match.group(1))
+                else:
+                    temperature = 0
+
+                print("Gefundene Temperatur:", temperature)
 
 
                 if temperature < MIN_TEMP:
@@ -87,9 +75,9 @@ else:
                 posted_deals.add(deal_id)
 
 
-                # ------------------------------------------------
+                # -------------------------------
                 # Deal Infos
-                # ------------------------------------------------
+                # -------------------------------
 
                 title = entry.title
                 link = entry.link
@@ -99,9 +87,9 @@ else:
                 image = entry.get("media_content", [{}])[0].get("url", None)
 
 
-                # ------------------------------------------------
+                # -------------------------------
                 # Nachricht bauen
-                # ------------------------------------------------
+                # -------------------------------
 
                 if is_amazon:
                     shop = "🛒 AMAZON DEAL"
@@ -117,9 +105,9 @@ else:
 """
 
 
-                # ------------------------------------------------
+                # -------------------------------
                 # Nachricht senden
-                # ------------------------------------------------
+                # -------------------------------
 
                 try:
 
@@ -147,11 +135,9 @@ else:
         except Exception as e:
             print("Feed Fehler:", e)
 
-        print("Warte 5 Minuten bis zum nächsten Check...")
+        print("Warte bis zum nächsten Check...")
 
         await asyncio.sleep(50)
 
 
 asyncio.run(main())
-
-
