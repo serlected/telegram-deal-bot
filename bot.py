@@ -2,12 +2,10 @@ import os
 import asyncio
 import feedparser
 import re
+import requests
+from bs4 import BeautifulSoup
 from telegram import Bot
 
-
-# -------------------------------
-# KONFIGURATION
-# -------------------------------
 
 TOKEN = os.getenv("TOKEN")
 
@@ -20,9 +18,24 @@ MIN_TEMP = 10
 posted_deals = set()
 
 
-# -------------------------------
-# HAUPTFUNKTION
-# -------------------------------
+def get_real_link(mydealz_link):
+
+    try:
+
+        r = requests.get(mydealz_link, timeout=10)
+
+        soup = BeautifulSoup(r.text, "html.parser")
+
+        button = soup.find("a", {"class": "cept-dealBtn"})
+
+        if button and button.get("href"):
+            return button["href"]
+
+    except:
+        pass
+
+    return mydealz_link
+
 
 async def main():
 
@@ -34,15 +47,9 @@ async def main():
 
         try:
 
-            print("-----")
             print("RSS wird geprüft...")
 
             feed = feedparser.parse(RSS_URL)
-
-            total_deals = len(feed.entries)
-            valid_deals = 0
-
-            print("Deals im Feed:", total_deals)
 
             for entry in feed.entries:
 
@@ -52,81 +59,45 @@ async def main():
                     continue
 
 
-                # -------------------------------
-                # Temperatur erkennen
-                # -------------------------------
+                text = entry.title + " " + entry.get("description", "")
 
-                text_to_check = entry.title + " " + entry.get("description", "")
-
-                temp_match = re.search(r"(\d+)\s*°", text_to_check)
+                temp_match = re.search(r"(\d+)\s*°", text)
 
                 if temp_match:
                     temperature = int(temp_match.group(1))
                 else:
                     temperature = 0
 
-                print("Temperatur erkannt:", temperature)
 
                 if temperature < MIN_TEMP:
                     continue
 
-                valid_deals += 1
+
                 posted_deals.add(deal_id)
 
-
-                # -------------------------------
-                # Deal Infos
-                # -------------------------------
-
                 title = entry.title
-                link = entry.link
-                description = entry.get("description", "")
 
+                mydealz_link = entry.link
 
-                # -------------------------------
-                # echten Shop Link finden
-                # -------------------------------
+                real_link = get_real_link(mydealz_link)
 
-                urls = re.findall(r'https?://[^\s"]+', description)
-
-                real_link = link
-
-                for url in urls:
-                    if "static.mydealz" not in url:
-                        real_link = url
-                        break
-
-
-                # -------------------------------
-                # Shop erkennen
-                # -------------------------------
 
                 link_lower = real_link.lower()
 
                 if "amazon" in link_lower:
                     shop = "🛒 AMAZON"
-                elif "mediamarkt" in link_lower:
-                    shop = "🛒 MEDIAMARKT"
-                elif "saturn" in link_lower:
-                    shop = "🛒 SATURN"
-                elif "otto" in link_lower:
-                    shop = "🛒 OTTO"
                 elif "ebay" in link_lower:
                     shop = "🛒 EBAY"
+                elif "otto" in link_lower:
+                    shop = "🛒 OTTO"
+                elif "mediamarkt" in link_lower:
+                    shop = "🛒 MEDIAMARKT"
                 else:
                     shop = "🛍 DEAL"
 
 
-                # -------------------------------
-                # Bild holen
-                # -------------------------------
-
                 image = entry.get("media_content", [{}])[0].get("url", None)
 
-
-                # -------------------------------
-                # Nachricht bauen
-                # -------------------------------
 
                 message = f"""
 🔥 {shop} ({temperature}°)
@@ -136,10 +107,6 @@ async def main():
 👉 {real_link}
 """
 
-
-                # -------------------------------
-                # Nachricht senden
-                # -------------------------------
 
                 try:
 
@@ -160,16 +127,15 @@ async def main():
                     await asyncio.sleep(3)
 
                 except Exception as e:
+
                     print("Telegram Fehler:", e)
 
-            print("Deals über Temperatur:", valid_deals)
-
         except Exception as e:
+
             print("Feed Fehler:", e)
 
-        print("Warte bis zum nächsten Check...")
 
-        await asyncio.sleep(50)
+        await asyncio.sleep(60)
 
 
 asyncio.run(main())
