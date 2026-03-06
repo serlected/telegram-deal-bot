@@ -168,7 +168,8 @@ async def main():
 
         print("Warte bis zum nächsten Check...")
 
-        await asyncio.sleep(50)
+        await asyncio.sleep(500)
 
 
 asyncio.run(main())
+
