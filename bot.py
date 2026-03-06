@@ -62,7 +62,7 @@ async def main():
 
                 if deal_id in posted_deals:
                     continue
-
+for entry in feed.entries:
                 import re
 
 temp_match = re.search(r"(\d+)°", entry.title)
@@ -132,5 +132,6 @@ else:
 
 
 asyncio.run(main())
+
 
 
