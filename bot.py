@@ -27,6 +27,11 @@ async def main():
 
             for entry in feed.entries:
 
+                temperature = entry.get("temperature", 0)
+
+if temperature < 300:
+    continue
+
                 if entry.link in posted_links:
                     continue
 
@@ -85,4 +90,5 @@ async def main():
 
 
 asyncio.run(main())
+
 
