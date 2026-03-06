@@ -6,7 +6,6 @@ import requests
 from bs4 import BeautifulSoup
 from telegram import Bot
 
-
 TOKEN = os.getenv("TOKEN")
 
 CHAT_ID = "@billiger_gehts_nicht"
@@ -22,17 +21,32 @@ def get_real_link(mydealz_link):
 
     try:
 
-        r = requests.get(mydealz_link, timeout=10)
+        headers = {
+            "User-Agent": "Mozilla/5.0"
+        }
+
+        r = requests.get(mydealz_link, headers=headers, timeout=10)
 
         soup = BeautifulSoup(r.text, "html.parser")
 
-        button = soup.find("a", {"class": "cept-dealBtn"})
+        # mögliche Button Klassen bei MyDealz
+        selectors = [
+            ".cept-dealBtn",
+            ".threadDealButton",
+            ".thread-link",
+            "a[data-type='deal']"
+        ]
 
-        if button and button.get("href"):
-            return button["href"]
+        for selector in selectors:
 
-    except:
-        pass
+            button = soup.select_one(selector)
+
+            if button and button.get("href"):
+                return button["href"]
+
+    except Exception as e:
+
+        print("Fehler beim Laden der Deal-Seite:", e)
 
     return mydealz_link
 
@@ -68,7 +82,6 @@ async def main():
                 else:
                     temperature = 0
 
-
                 if temperature < MIN_TEMP:
                     continue
 
@@ -92,6 +105,8 @@ async def main():
                     shop = "🛒 OTTO"
                 elif "mediamarkt" in link_lower:
                     shop = "🛒 MEDIAMARKT"
+                elif "saturn" in link_lower:
+                    shop = "🛒 SATURN"
                 else:
                     shop = "🛍 DEAL"
 
@@ -133,7 +148,6 @@ async def main():
         except Exception as e:
 
             print("Feed Fehler:", e)
-
 
         await asyncio.sleep(60)
 
