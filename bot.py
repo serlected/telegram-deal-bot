@@ -5,10 +5,8 @@
 # - liest MyDealz RSS Feed
 # - filtert Deals nach Temperatur
 # - verhindert Doppelposts
-# - lädt Deal Seite
-# - findet echten Shop Link
-# - erkennt Shop (Amazon / eBay etc.)
-# - postet Bild + Deal in Telegram
+# - erkennt Shop aus Titel
+# - postet Bild + Deal
 # - zeigt Logs in Railway
 # ------------------------------------------------
 
@@ -16,8 +14,6 @@ import os
 import asyncio
 import feedparser
 import re
-import requests
-from bs4 import BeautifulSoup
 from telegram import Bot
 
 
@@ -37,70 +33,29 @@ posted_deals = set()
 
 
 # ------------------------------------------------
-# ECHTEN SHOP LINK FINDEN
-# ------------------------------------------------
-
-def get_real_link(mydealz_link):
-
-    try:
-
-        headers = {
-            "User-Agent": "Mozilla/5.0"
-        }
-
-        r = requests.get(mydealz_link, headers=headers, timeout=10)
-
-        soup = BeautifulSoup(r.text, "html.parser")
-
-        links = soup.find_all("a", href=True)
-
-        for a in links:
-
-            url = a["href"]
-
-            # interne Pepper Seiten ignorieren
-            if any(x in url for x in [
-                "mydealz",
-                "pepper",
-                "dealabs",
-                "hotukdeals"
-            ]):
-                continue
-
-            if url.startswith("http"):
-                return url
-
-    except Exception as e:
-
-        print("Deal-Seite Fehler:", e)
-
-    return mydealz_link
-
-
-# ------------------------------------------------
 # SHOP ERKENNUNG
 # ------------------------------------------------
 
-def detect_shop(link):
+def detect_shop(text):
 
-    link = link.lower()
+    text = text.lower()
 
-    if "amazon" in link:
+    if "amazon" in text:
         return "🛒 AMAZON DEAL"
 
-    elif "ebay" in link:
+    elif "ebay" in text:
         return "🛒 EBAY DEAL"
 
-    elif "otto" in link:
+    elif "otto" in text:
         return "🛒 OTTO DEAL"
 
-    elif "mediamarkt" in link:
+    elif "mediamarkt" in text:
         return "🛒 MEDIAMARKT DEAL"
 
-    elif "saturn" in link:
+    elif "saturn" in text:
         return "🛒 SATURN DEAL"
 
-    elif "alternate" in link:
+    elif "alternate" in text:
         return "🛒 ALTERNATE DEAL"
 
     else:
@@ -126,10 +81,9 @@ async def main():
 
             feed = feedparser.parse(RSS_URL)
 
-            total_deals = len(feed.entries)
-            valid_deals = 0
+            print("Deals im Feed:", len(feed.entries))
 
-            print("Deals im Feed:", total_deals)
+            valid_deals = 0
 
             for entry in feed.entries:
 
@@ -143,9 +97,9 @@ async def main():
                 # Temperatur erkennen
                 # ------------------------------------------------
 
-                text_to_check = entry.title + " " + entry.get("description", "")
+                text = entry.title + " " + entry.get("description", "")
 
-                temp_match = re.search(r"(\d+)\s*°", text_to_check)
+                temp_match = re.search(r"(\d+)\s*°", text)
 
                 if temp_match:
                     temperature = int(temp_match.group(1))
@@ -157,7 +111,6 @@ async def main():
                     continue
 
                 valid_deals += 1
-
                 posted_deals.add(deal_id)
 
 
@@ -166,12 +119,9 @@ async def main():
                 # ------------------------------------------------
 
                 title = entry.title
+                link = entry.link
 
-                mydealz_link = entry.link
-
-                real_link = get_real_link(mydealz_link)
-
-                shop = detect_shop(real_link)
+                shop = detect_shop(title)
 
                 image = entry.get("media_content", [{}])[0].get("url", None)
 
@@ -185,7 +135,7 @@ async def main():
 
 {title}
 
-👉 {real_link}
+👉 {link}
 """
 
 
@@ -218,11 +168,13 @@ async def main():
 
                     print("Telegram Fehler:", e)
 
+
             print("Deals über Temperatur:", valid_deals)
 
         except Exception as e:
 
             print("Feed Fehler:", e)
+
 
         print("Warte 60 Sekunden bis zum nächsten Check...")
 
