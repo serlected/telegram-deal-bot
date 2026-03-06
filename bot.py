@@ -1,15 +1,15 @@
-# -----------------------------
-# Telegram Deal Bot
-# -----------------------------
-# Dieser Bot liest automatisch den RSS-Feed von MyDealz
-# und postet neue Deals in einen Telegram-Kanal.
-#
+# ------------------------------------------------
+# TELEGRAM DEAL BOT
+# ------------------------------------------------
 # Funktionen:
-# - Läuft 24/7 auf Railway
-# - Postet Deals mit Bild
+# - Liest MyDealz RSS Feed
+# - Postet Deals automatisch in Telegram
+# - Postet Dealbilder
 # - Filtert Deals nach Temperatur
 # - Verhindert Doppelposts
-# -----------------------------
+# - Markiert Amazon Deals
+# - Läuft 24/7 auf Railway
+# ------------------------------------------------
 
 import os
 import asyncio
@@ -17,29 +17,30 @@ import feedparser
 from telegram import Bot
 
 
-# -----------------------------
+# ------------------------------------------------
 # KONFIGURATION
-# -----------------------------
+# ------------------------------------------------
 
-# Telegram Token wird aus Railway Variables geladen
+# Telegram Token aus Railway Variables laden
 TOKEN = os.getenv("TOKEN")
 
 # Dein Telegram Kanal
 CHAT_ID = "@billiger_gehts_nicht"
 
-# RSS Feed von MyDealz
+# MyDealz RSS Feed
 RSS_URL = "https://www.mydealz.de/rss/deals"
 
 # Mindesttemperatur für Deals
 MIN_TEMP = 300
 
-# Liste für bereits gepostete Deals
+# Set für bereits gepostete Deals
 posted_deals = set()
 
 
-# -----------------------------
+# ------------------------------------------------
 # HAUPTFUNKTION
-# -----------------------------
+# ------------------------------------------------
+
 async def main():
 
     # Telegram Bot initialisieren
@@ -57,9 +58,9 @@ async def main():
             # Alle Deals im Feed durchgehen
             for entry in feed.entries:
 
-                # -----------------------------
+                # ------------------------------------------------
                 # Doppelpost Schutz
-                # -----------------------------
+                # ------------------------------------------------
 
                 deal_id = entry.get("id", entry.get("link"))
 
@@ -68,37 +69,48 @@ async def main():
 
                 posted_deals.add(deal_id)
 
-                # -----------------------------
-                # Deal Temperatur prüfen
-                # -----------------------------
+                # ------------------------------------------------
+                # Temperatur prüfen
+                # ------------------------------------------------
 
                 temperature = entry.get("temperature", 0)
 
                 if temperature < MIN_TEMP:
                     continue
 
-                # -----------------------------
+                # ------------------------------------------------
                 # Deal Informationen
-                # -----------------------------
+                # ------------------------------------------------
 
                 title = entry.title
                 link = entry.link
 
-                # Bild aus RSS Feed holen
+                # Amazon Deal erkennen
+                is_amazon = "amazon" in link.lower()
+
+                # Deal Bild aus RSS holen
                 image = entry.get("media_content", [{}])[0].get("url", None)
 
+                # ------------------------------------------------
                 # Nachricht formatieren
+                # ------------------------------------------------
+
+                if is_amazon:
+                    shop = "🛒 AMAZON DEAL"
+                else:
+                    shop = "🛍 DEAL"
+
                 message = f"""
-🔥 HOT DEAL ({temperature}°)
+🔥 {shop} ({temperature}°)
 
 {title}
 
 👉 {link}
 """
 
-                # -----------------------------
+                # ------------------------------------------------
                 # Nachricht senden
-                # -----------------------------
+                # ------------------------------------------------
 
                 try:
 
@@ -119,7 +131,7 @@ async def main():
 
                     print("Deal gepostet:", title)
 
-                    # kleine Pause (Telegram Flood Schutz)
+                    # Pause um Telegram Flood zu vermeiden
                     await asyncio.sleep(3)
 
                 except Exception as e:
@@ -128,10 +140,11 @@ async def main():
         except Exception as e:
             print("Feed Fehler:", e)
 
-        # -----------------------------
-        # Pause bevor neuer Check
-        # -----------------------------
-        await asyncio.sleep(300)   # 5 Minuten
+        # ------------------------------------------------
+        # Pause bis zum nächsten RSS Check
+        # ------------------------------------------------
+
+        await asyncio.sleep(300)  # 5 Minuten
 
 
 # Bot starten
