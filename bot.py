@@ -1,3 +1,17 @@
+# ------------------------------------------------
+# TELEGRAM DEAL BOT
+# ------------------------------------------------
+# Funktionen
+# - liest MyDealz RSS Feed
+# - filtert Deals nach Temperatur
+# - verhindert Doppelposts
+# - lädt Deal Seite
+# - findet echten Shop Link
+# - erkennt Shop (Amazon / eBay etc.)
+# - postet Bild + Deal in Telegram
+# - zeigt Logs in Railway
+# ------------------------------------------------
+
 import os
 import asyncio
 import feedparser
@@ -5,6 +19,11 @@ import re
 import requests
 from bs4 import BeautifulSoup
 from telegram import Bot
+
+
+# ------------------------------------------------
+# KONFIGURATION
+# ------------------------------------------------
 
 TOKEN = os.getenv("TOKEN")
 
@@ -16,6 +35,10 @@ MIN_TEMP = 10
 
 posted_deals = set()
 
+
+# ------------------------------------------------
+# ECHTEN SHOP LINK FINDEN
+# ------------------------------------------------
 
 def get_real_link(mydealz_link):
 
@@ -29,27 +52,64 @@ def get_real_link(mydealz_link):
 
         soup = BeautifulSoup(r.text, "html.parser")
 
-        # mögliche Button Klassen bei MyDealz
-        selectors = [
-            ".cept-dealBtn",
-            ".threadDealButton",
-            ".thread-link",
-            "a[data-type='deal']"
-        ]
+        links = soup.find_all("a", href=True)
 
-        for selector in selectors:
+        for a in links:
 
-            button = soup.select_one(selector)
+            url = a["href"]
 
-            if button and button.get("href"):
-                return button["href"]
+            # interne Pepper Seiten ignorieren
+            if any(x in url for x in [
+                "mydealz",
+                "pepper",
+                "dealabs",
+                "hotukdeals"
+            ]):
+                continue
+
+            if url.startswith("http"):
+                return url
 
     except Exception as e:
 
-        print("Fehler beim Laden der Deal-Seite:", e)
+        print("Deal-Seite Fehler:", e)
 
     return mydealz_link
 
+
+# ------------------------------------------------
+# SHOP ERKENNUNG
+# ------------------------------------------------
+
+def detect_shop(link):
+
+    link = link.lower()
+
+    if "amazon" in link:
+        return "🛒 AMAZON DEAL"
+
+    elif "ebay" in link:
+        return "🛒 EBAY DEAL"
+
+    elif "otto" in link:
+        return "🛒 OTTO DEAL"
+
+    elif "mediamarkt" in link:
+        return "🛒 MEDIAMARKT DEAL"
+
+    elif "saturn" in link:
+        return "🛒 SATURN DEAL"
+
+    elif "alternate" in link:
+        return "🛒 ALTERNATE DEAL"
+
+    else:
+        return "🛍 DEAL"
+
+
+# ------------------------------------------------
+# HAUPTFUNKTION
+# ------------------------------------------------
 
 async def main():
 
@@ -61,9 +121,15 @@ async def main():
 
         try:
 
+            print("-----")
             print("RSS wird geprüft...")
 
             feed = feedparser.parse(RSS_URL)
+
+            total_deals = len(feed.entries)
+            valid_deals = 0
+
+            print("Deals im Feed:", total_deals)
 
             for entry in feed.entries:
 
@@ -73,20 +139,31 @@ async def main():
                     continue
 
 
-                text = entry.title + " " + entry.get("description", "")
+                # ------------------------------------------------
+                # Temperatur erkennen
+                # ------------------------------------------------
 
-                temp_match = re.search(r"(\d+)\s*°", text)
+                text_to_check = entry.title + " " + entry.get("description", "")
+
+                temp_match = re.search(r"(\d+)\s*°", text_to_check)
 
                 if temp_match:
                     temperature = int(temp_match.group(1))
                 else:
                     temperature = 0
 
+
                 if temperature < MIN_TEMP:
                     continue
 
+                valid_deals += 1
 
                 posted_deals.add(deal_id)
+
+
+                # ------------------------------------------------
+                # Deal Infos
+                # ------------------------------------------------
 
                 title = entry.title
 
@@ -94,25 +171,14 @@ async def main():
 
                 real_link = get_real_link(mydealz_link)
 
-
-                link_lower = real_link.lower()
-
-                if "amazon" in link_lower:
-                    shop = "🛒 AMAZON"
-                elif "ebay" in link_lower:
-                    shop = "🛒 EBAY"
-                elif "otto" in link_lower:
-                    shop = "🛒 OTTO"
-                elif "mediamarkt" in link_lower:
-                    shop = "🛒 MEDIAMARKT"
-                elif "saturn" in link_lower:
-                    shop = "🛒 SATURN"
-                else:
-                    shop = "🛍 DEAL"
-
+                shop = detect_shop(real_link)
 
                 image = entry.get("media_content", [{}])[0].get("url", None)
 
+
+                # ------------------------------------------------
+                # Nachricht bauen
+                # ------------------------------------------------
 
                 message = f"""
 🔥 {shop} ({temperature}°)
@@ -123,15 +189,22 @@ async def main():
 """
 
 
+                # ------------------------------------------------
+                # Nachricht senden
+                # ------------------------------------------------
+
                 try:
 
                     if image:
+
                         await bot.send_photo(
                             chat_id=CHAT_ID,
                             photo=image,
                             caption=message
                         )
+
                     else:
+
                         await bot.send_message(
                             chat_id=CHAT_ID,
                             text=message
@@ -145,9 +218,13 @@ async def main():
 
                     print("Telegram Fehler:", e)
 
+            print("Deals über Temperatur:", valid_deals)
+
         except Exception as e:
 
             print("Feed Fehler:", e)
+
+        print("Warte 60 Sekunden bis zum nächsten Check...")
 
         await asyncio.sleep(60)
 
