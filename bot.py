@@ -4,6 +4,7 @@ import feedparser
 import re
 from telegram import Bot
 
+
 # -------------------------------
 # KONFIGURATION
 # -------------------------------
@@ -66,7 +67,6 @@ async def main():
 
                 print("Gefundene Temperatur:", temperature)
 
-
                 if temperature < MIN_TEMP:
                     continue
 
@@ -81,8 +81,44 @@ async def main():
 
                 title = entry.title
                 link = entry.link
+                description = entry.get("description", "")
 
-                is_amazon = "amazon" in link.lower()
+
+                # -------------------------------
+                # echten Shop-Link finden
+                # -------------------------------
+
+                url_match = re.search(r'https?://[^\s"]+', description)
+
+                if url_match:
+                    real_link = url_match.group(0)
+                else:
+                    real_link = link
+
+
+                # -------------------------------
+                # Shop erkennen
+                # -------------------------------
+
+                link_lower = real_link.lower()
+
+                if "amazon" in link_lower:
+                    shop = "🛒 AMAZON"
+                elif "mediamarkt" in link_lower:
+                    shop = "🛒 MEDIAMARKT"
+                elif "saturn" in link_lower:
+                    shop = "🛒 SATURN"
+                elif "otto" in link_lower:
+                    shop = "🛒 OTTO"
+                elif "ebay" in link_lower:
+                    shop = "🛒 EBAY"
+                else:
+                    shop = "🛍 DEAL"
+
+
+                # -------------------------------
+                # Bild holen
+                # -------------------------------
 
                 image = entry.get("media_content", [{}])[0].get("url", None)
 
@@ -91,17 +127,12 @@ async def main():
                 # Nachricht bauen
                 # -------------------------------
 
-                if is_amazon:
-                    shop = "🛒 AMAZON DEAL"
-                else:
-                    shop = "🛍 DEAL"
-
                 message = f"""
 🔥 {shop} ({temperature}°)
 
 {title}
 
-👉 {link}
+👉 {real_link}
 """
 
 
