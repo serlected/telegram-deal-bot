@@ -63,7 +63,14 @@ async def main():
                 if deal_id in posted_deals:
                     continue
 
-                temperature = entry.get("temperature", 0)
+                import re
+
+temp_match = re.search(r"(\d+)°", entry.title)
+
+if temp_match:
+    temperature = int(temp_match.group(1))
+else:
+    temperature = 0
 
                 if temperature < MIN_TEMP:
                     continue
@@ -125,3 +132,4 @@ async def main():
 
 
 asyncio.run(main())
+
