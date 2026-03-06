@@ -53,7 +53,7 @@ async def main():
 
 
                 # -------------------------------
-                # Temperatur aus Titel + Beschreibung
+                # Temperatur erkennen
                 # -------------------------------
 
                 text_to_check = entry.title + " " + entry.get("description", "")
@@ -65,13 +65,12 @@ async def main():
                 else:
                     temperature = 0
 
-                print("Gefundene Temperatur:", temperature)
+                print("Temperatur erkannt:", temperature)
 
                 if temperature < MIN_TEMP:
                     continue
 
                 valid_deals += 1
-
                 posted_deals.add(deal_id)
 
 
@@ -85,15 +84,17 @@ async def main():
 
 
                 # -------------------------------
-                # echten Shop-Link finden
+                # echten Shop Link finden
                 # -------------------------------
 
-                url_match = re.search(r'https?://[^\s"]+', description)
+                urls = re.findall(r'https?://[^\s"]+', description)
 
-                if url_match:
-                    real_link = url_match.group(0)
-                else:
-                    real_link = link
+                real_link = link
+
+                for url in urls:
+                    if "static.mydealz" not in url:
+                        real_link = url
+                        break
 
 
                 # -------------------------------
@@ -168,8 +169,7 @@ async def main():
 
         print("Warte bis zum nächsten Check...")
 
-        await asyncio.sleep(500)
+        await asyncio.sleep(50)
 
 
 asyncio.run(main())
-
