@@ -14,6 +14,7 @@
 import os
 import asyncio
 import feedparser
+import re
 from telegram import Bot
 
 
@@ -62,15 +63,19 @@ async def main():
 
                 if deal_id in posted_deals:
                     continue
-for entry in feed.entries:
-                import re
 
-temp_match = re.search(r"(\d+)°", entry.title)
 
-if temp_match:
-    temperature = int(temp_match.group(1))
-else:
-    temperature = 0
+                # ------------------------------------------------
+                # Temperatur aus Titel lesen
+                # ------------------------------------------------
+
+                temp_match = re.search(r"(\d+)°", entry.title)
+
+                if temp_match:
+                    temperature = int(temp_match.group(1))
+                else:
+                    temperature = 0
+
 
                 if temperature < MIN_TEMP:
                     continue
@@ -79,13 +84,22 @@ else:
 
                 posted_deals.add(deal_id)
 
+
+                # ------------------------------------------------
+                # Deal Infos
+                # ------------------------------------------------
+
                 title = entry.title
                 link = entry.link
 
-                # Amazon erkennen
                 is_amazon = "amazon" in link.lower()
 
                 image = entry.get("media_content", [{}])[0].get("url", None)
+
+
+                # ------------------------------------------------
+                # Nachricht bauen
+                # ------------------------------------------------
 
                 if is_amazon:
                     shop = "🛒 AMAZON DEAL"
@@ -99,6 +113,11 @@ else:
 
 👉 {link}
 """
+
+
+                # ------------------------------------------------
+                # Nachricht senden
+                # ------------------------------------------------
 
                 try:
 
@@ -132,6 +151,3 @@ else:
 
 
 asyncio.run(main())
-
-
-
