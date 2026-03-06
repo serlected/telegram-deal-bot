@@ -10,6 +10,8 @@ import os
 TOKEN = os.getenv("TOKEN")
 CHAT_ID = "@billiger_gehts_nicht"
 
+posted_deals = set()
+
 RSS_URL = "https://www.mydealz.de/rss/deals"
 
 MIN_TEMP = 200
@@ -26,6 +28,13 @@ async def main():
             feed = feedparser.parse(RSS_URL)
 
             for entry in feed.entries:
+                
+                deal_id = entry.get("id", entry.get("link"))
+
+if deal_id in posted_deals:
+    continue
+
+posted_deals.add(deal_id)
 
                 temperature = entry.get("temperature", 0)
 
@@ -90,5 +99,6 @@ if temperature < 300:
 
 
 asyncio.run(main())
+
 
 
