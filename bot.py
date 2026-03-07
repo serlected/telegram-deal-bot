@@ -1,96 +1,24 @@
 import os
 import asyncio
 import requests
-import re
-from bs4 import BeautifulSoup
 from telegram import Bot
 
 
 TOKEN = os.getenv("TOKEN")
 CHAT_ID = "@billiger_gehts_nicht"
 
-
 posted_links = set()
-posted_titles = set()
 
 
-# ------------------------
-# PREIS ERKENNEN
-# ------------------------
-
-def extract_prices(text):
-
-    prices = re.findall(r"\d+[.,]?\d*\s?€", text)
-
-    if len(prices) >= 2:
-
-        new_price = prices[0]
-        old_price = prices[1]
-
-        try:
-
-            n = float(new_price.replace("€","").replace(",","."))
-            o = float(old_price.replace("€","").replace(",","."))
-            discount = round((1 - n/o) * 100)
-        except:
-            discount = None
-
-        return new_price, old_price, discount
-
-    if len(prices) == 1:
-        return prices[0], None, None
-
-    return None, None, None
-
-
-# ------------------------
-# KATEGORIE ERKENNEN
-# ------------------------
-
-def detect_category(text):
-
-    text = text.lower()
-
-    if any(x in text for x in ["schuh","sneaker","running","air max"]):
-        return "👟 SCHUHE"
-
-    if any(x in text for x in ["shirt","jacke","hoodie","hose"]):
-        return "👕 KLEIDUNG"
-
-    if any(x in text for x in ["protein","creatin","booster"]):
-        return "🥤 SUPPLEMENTS"
-
-    if any(x in text for x in ["hantel","fitness","gym"]):
-        return "🏋️ FITNESS"
-
-    return "🛒 PRODUKT"
-
-
-# ------------------------
-# SPAM FILTER
-# ------------------------
-
-def is_duplicate(title):
-
-    short = title.lower()[:60]
-
-    if short in posted_titles:
-        return True
-
-    posted_titles.add(short)
-
-    return False
-
-
-# ------------------------
-# AMAZON DEALS
-# ------------------------
+# ---------------------------------
+# AMAZON DEAL API
+# ---------------------------------
 
 def get_amazon_deals():
 
     deals = []
 
-    url = "https://www.amazon.de/gp/goldbox"
+    url = "https://www.amazon.de/gp/goldbox?nocache=1"
 
     headers = {
         "User-Agent": "Mozilla/5.0"
@@ -100,49 +28,28 @@ def get_amazon_deals():
 
         r = requests.get(url, headers=headers)
 
-        soup = BeautifulSoup(r.text, "html.parser")
+        text = r.text
 
-        cards = soup.select("div[data-cy='deal-card']")
+        lines = text.split('"dealID"')
 
-        for c in cards[:20]:
+        for line in lines[1:20]:
 
-            title = c.get_text().strip()
+            try:
 
-            if is_duplicate(title):
-                continue
+                title = line.split('"title":"')[1].split('"')[0]
 
-            link_tag = c.find("a")
+                link = "https://www.amazon.de/gp/goldbox"
 
-            img_tag = c.find("img")
+                image = None
 
-            link = None
-            image = None
+                deals.append({
+                    "title": title,
+                    "link": link,
+                    "image": image
+                })
 
-            if link_tag:
-                link = "https://www.amazon.de" + link_tag.get("href")
-
-            if img_tag:
-                image = img_tag.get("src")
-
-            if not link:
-                continue
-
-            if link in posted_links:
-                continue
-
-            price, old_price, discount = extract_prices(title)
-
-            category = detect_category(title)
-
-            deals.append({
-                "title": title,
-                "link": link,
-                "image": image,
-                "price": price,
-                "old_price": old_price,
-                "discount": discount,
-                "category": category
-            })
+            except:
+                pass
 
     except Exception as e:
 
@@ -151,9 +58,9 @@ def get_amazon_deals():
     return deals
 
 
-# ------------------------
+# ---------------------------------
 # BOT
-# ------------------------
+# ---------------------------------
 
 async def main():
 
@@ -171,47 +78,25 @@ async def main():
 
             for deal in deals:
 
-                posted_links.add(deal["link"])
+                if deal["title"] in posted_links:
+                    continue
+
+                posted_links.add(deal["title"])
 
                 message = f"""
-⭐ AMAZON DEAL
-
-{deal['category']}
+🛒 AMAZON DEAL
 
 {deal['title']}
+
+👉 {deal['link']}
 """
-
-                if deal["price"]:
-
-                    if deal["old_price"]:
-
-                        message += f"\n💰 {deal['price']} statt {deal['old_price']}"
-
-                        if deal["discount"]:
-                            message += f"\n📉 -{deal['discount']}%"
-
-                    else:
-
-                        message += f"\n💰 {deal['price']}"
-
-                message += f"\n\n👉 {deal['link']}"
 
                 try:
 
-                    if deal["image"]:
-
-                        await bot.send_photo(
-                            chat_id=CHAT_ID,
-                            photo=deal["image"],
-                            caption=message
-                        )
-
-                    else:
-
-                        await bot.send_message(
-                            chat_id=CHAT_ID,
-                            text=message
-                        )
+                    await bot.send_message(
+                        chat_id=CHAT_ID,
+                        text=message
+                    )
 
                 except Exception as e:
 
