@@ -1,184 +1,364 @@
-# ------------------------------------------------
-# TELEGRAM DEAL BOT
-# ------------------------------------------------
-# Funktionen
-# - liest MyDealz RSS Feed
-# - filtert Deals nach Temperatur
-# - verhindert Doppelposts
-# - erkennt Shop aus Titel
-# - postet Bild + Deal
-# - zeigt Logs in Railway
-# ------------------------------------------------
-
 import os
 import asyncio
 import feedparser
+import aiohttp
+import requests
 import re
+from bs4 import BeautifulSoup
 from telegram import Bot
 
-
-# ------------------------------------------------
-# KONFIGURATION
-# ------------------------------------------------
-
 TOKEN = os.getenv("TOKEN")
-
 CHAT_ID = "@billiger_gehts_nicht"
 
-RSS_URL = "https://www.mydealz.de/rss/deals"
+MYDEALZ_RSS = "https://www.mydealz.de/rss/deals"
 
-MIN_TEMP = 10
+posted_links = set()
+posted_titles = set()
 
-posted_deals = set()
+
+# -------------------------
+# PREIS ERKENNUNG
+# -------------------------
+
+def extract_prices(text):
+
+    prices = re.findall(r"\d+[.,]?\d*\s?€", text)
+
+    if len(prices) >= 2:
+
+        new_price = prices[0]
+        old_price = prices[1]
+
+        try:
+
+            n = float(new_price.replace("€","").replace(",","."))
+            o = float(old_price.replace("€","").replace(",","."))
+            discount = round((1 - n/o) * 100)
+        except:
+            discount = None
+
+        return new_price, old_price, discount
+
+    if len(prices) == 1:
+        return prices[0], None, None
+
+    return None, None, None
 
 
-# ------------------------------------------------
-# SHOP ERKENNUNG
-# ------------------------------------------------
+# -------------------------
+# KATEGORIE
+# -------------------------
 
-def detect_shop(text):
+def detect_category(text):
 
     text = text.lower()
 
-    if "amazon" in text:
-        return "🛒 AMAZON DEAL"
+    if any(x in text for x in ["schuh","sneaker","running","air max","ultraboost"]):
+        return "👟 SCHUHE"
 
-    elif "ebay" in text:
-        return "🛒 EBAY DEAL"
+    if any(x in text for x in ["hoodie","shirt","hose","shorts","jacke"]):
+        return "👕 KLEIDUNG"
 
-    elif "otto" in text:
-        return "🛒 OTTO DEAL"
+    if any(x in text for x in ["protein","creatin","booster"]):
+        return "🥤 SUPPLEMENTS"
 
-    elif "mediamarkt" in text:
-        return "🛒 MEDIAMARKT DEAL"
+    if any(x in text for x in ["hantel","fitness","gym"]):
+        return "🏋️ FITNESS"
 
-    elif "saturn" in text:
-        return "🛒 SATURN DEAL"
-
-    elif "alternate" in text:
-        return "🛒 ALTERNATE DEAL"
-
-    else:
-        return "🛍 DEAL"
+    return "🏃 SPORT"
 
 
-# ------------------------------------------------
-# HAUPTFUNKTION
-# ------------------------------------------------
+# -------------------------
+# DUPLICATE FILTER
+# -------------------------
+
+def is_duplicate(title):
+
+    short = title.lower()[:50]
+
+    if short in posted_titles:
+        return True
+
+    posted_titles.add(short)
+
+    return False
+
+
+# -------------------------
+# DEAL HINZUFÜGEN
+# -------------------------
+
+def add_deal(deals,title,link,shop,image=None):
+
+    if link in posted_links:
+        return
+
+    if is_duplicate(title):
+        return
+
+    price,old_price,discount = extract_prices(title)
+
+    if discount and discount < 20:
+        return
+
+    category = detect_category(title)
+
+    deals.append({
+        "title":title,
+        "link":link,
+        "shop":shop,
+        "price":price,
+        "old_price":old_price,
+        "discount":discount,
+        "category":category,
+        "image":image
+    })
+
+
+# -------------------------
+# MYDEALZ
+# -------------------------
+
+def get_mydealz():
+
+    deals=[]
+
+    feed=feedparser.parse(MYDEALZ_RSS)
+
+    for entry in feed.entries:
+
+        title=entry.title
+        link=entry.link
+
+        image=None
+
+        if "media_content" in entry:
+            image=entry.media_content[0]["url"]
+
+        add_deal(deals,title,link,"MYDEALZ",image)
+
+    return deals
+
+
+# -------------------------
+# GENERISCHER SCRAPER
+# -------------------------
+
+def scrape(url,selector,prefix,shop):
+
+    deals=[]
+
+    try:
+
+        r=requests.get(url,headers={"User-Agent":"Mozilla/5.0"})
+        soup=BeautifulSoup(r.text,"html.parser")
+
+        items=soup.select(selector)
+
+        for i in items[:10]:
+
+            title=i.get_text().strip()
+            link=i.get("href")
+
+            image=None
+
+            img=i.find("img")
+
+            if img:
+                image=img.get("src")
+
+            if prefix:
+                link=prefix+link
+
+            add_deal(deals,title,link,shop,image)
+
+    except Exception as e:
+
+        print(shop,"Fehler:",e)
+
+    return deals
+
+
+# -------------------------
+# AMAZON
+# -------------------------
+
+def get_amazon():
+
+    deals=[]
+
+    try:
+
+        url="https://www.amazon.de/gp/goldbox"
+
+        r=requests.get(url,headers={"User-Agent":"Mozilla/5.0"})
+        soup=BeautifulSoup(r.text,"html.parser")
+
+        cards=soup.select("div[data-cy='deal-card']")
+
+        for c in cards[:10]:
+
+            title=c.get_text().strip()
+
+            link_tag=c.find("a")
+
+            img=c.find("img")
+
+            link=None
+            image=None
+
+            if link_tag:
+                link="https://www.amazon.de"+link_tag.get("href")
+
+            if img:
+                image=img.get("src")
+
+            if link:
+                add_deal(deals,title,link,"AMAZON",image)
+
+    except Exception as e:
+
+        print("Amazon Fehler",e)
+
+    return deals
+
+
+# -------------------------
+# EBAY
+# -------------------------
+
+def get_ebay():
+
+    deals=[]
+
+    try:
+
+        url="https://www.ebay.de/deals"
+
+        r=requests.get(url,headers={"User-Agent":"Mozilla/5.0"})
+        soup=BeautifulSoup(r.text,"html.parser")
+
+        items=soup.select("div.ebayui-dne-item-featured-card")
+
+        for i in items[:10]:
+
+            title=i.get_text().strip()
+
+            a=i.find("a")
+            img=i.find("img")
+
+            link=None
+            image=None
+
+            if a:
+                link=a.get("href")
+
+            if img:
+                image=img.get("src")
+
+            if link:
+                add_deal(deals,title,link,"EBAY",image)
+
+    except Exception as e:
+
+        print("Ebay Fehler",e)
+
+    return deals
+
+
+# -------------------------
+# BOT
+# -------------------------
 
 async def main():
 
-    bot = Bot(token=TOKEN)
+    bot=Bot(token=TOKEN)
 
-    print("Bot gestartet...")
+    print("Sport Deal Bot V6 gestartet")
 
     while True:
 
         try:
 
-            print("-----")
-            print("RSS wird geprüft...")
+            deals=[]
 
-            feed = feedparser.parse(RSS_URL)
+            deals+=get_mydealz()
 
-            print("Deals im Feed:", len(feed.entries))
+            deals+=scrape("https://www.nike.com/de/w/sale-3yaep",
+                          "a.product-card__link-overlay",
+                          "https://www.nike.com",
+                          "NIKE")
 
-            valid_deals = 0
+            deals+=scrape("https://www.adidas.de/sale",
+                          "a.gl-product-card__assets-link",
+                          "https://www.adidas.de",
+                          "ADIDAS")
 
-            for entry in feed.entries:
+            deals+=scrape("https://eu.puma.com/de/de/sale",
+                          "a.tile-root",
+                          "",
+                          "PUMA")
 
-                deal_id = entry.get("id", entry.get("link"))
+            deals+=scrape("https://www.decathlon.de/de/sale",
+                          "a[data-testid='product-card-link']",
+                          "https://www.decathlon.de",
+                          "DECATHLON")
 
-                if deal_id in posted_deals:
-                    continue
-
-
-                # ------------------------------------------------
-                # Temperatur erkennen
-                # ------------------------------------------------
-
-                text = entry.title + " " + entry.get("description", "")
-
-                temp_match = re.search(r"(\d+)\s*°", text)
-
-                if temp_match:
-                    temperature = int(temp_match.group(1))
-                else:
-                    temperature = 0
+            deals+=get_amazon()
+            deals+=get_ebay()
 
 
-                if temperature < MIN_TEMP:
-                    continue
+            for deal in deals:
 
-                valid_deals += 1
-                posted_deals.add(deal_id)
+                posted_links.add(deal["link"])
 
+                message=f"""
+⭐ {deal['shop']} TOP DEAL
 
-                # ------------------------------------------------
-                # Deal Infos
-                # ------------------------------------------------
+{deal['category']}
 
-                title = entry.title
-                link = entry.link
-
-                shop = detect_shop(title)
-
-                image = entry.get("media_content", [{}])[0].get("url", None)
-
-
-                # ------------------------------------------------
-                # Nachricht bauen
-                # ------------------------------------------------
-
-                message = f"""
-🔥 {shop} ({temperature}°)
-
-{title}
-
-👉 {link}
+{deal['title']}
 """
 
+                if deal["price"]:
 
-                # ------------------------------------------------
-                # Nachricht senden
-                # ------------------------------------------------
+                    if deal["old_price"]:
 
-                try:
+                        message+=f"\n💰 {deal['price']} statt {deal['old_price']}"
 
-                    if image:
-
-                        await bot.send_photo(
-                            chat_id=CHAT_ID,
-                            photo=image,
-                            caption=message
-                        )
+                        if deal["discount"]:
+                            message+=f"\n📉 -{deal['discount']}%"
 
                     else:
 
-                        await bot.send_message(
-                            chat_id=CHAT_ID,
-                            text=message
-                        )
+                        message+=f"\n💰 {deal['price']}"
 
-                    print("Deal gepostet:", title)
+                message+=f"\n\n👉 {deal['link']}"
 
-                    await asyncio.sleep(3)
+                if deal["image"]:
 
-                except Exception as e:
+                    await bot.send_photo(
+                        chat_id=CHAT_ID,
+                        photo=deal["image"],
+                        caption=message
+                    )
 
-                    print("Telegram Fehler:", e)
+                else:
 
+                    await bot.send_message(
+                        chat_id=CHAT_ID,
+                        text=message
+                    )
 
-            print("Deals über Temperatur:", valid_deals)
+                print("Deal gepostet:",deal["title"])
+
+                await asyncio.sleep(2)
 
         except Exception as e:
 
-            print("Feed Fehler:", e)
+            print("Bot Fehler:",e)
 
-
-        print("Warte 60 Sekunden bis zum nächsten Check...")
-
-        await asyncio.sleep(60)
+        await asyncio.sleep(180)
 
 
 asyncio.run(main())
